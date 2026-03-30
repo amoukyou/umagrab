@@ -287,9 +287,9 @@
       <div class="uma-log-header">
         <span>Logs (${recent.length} recent, ${warns.length} warnings)</span>
         <span>
-          <button onclick="navigator.clipboard.writeText(localStorage.getItem('umagrab_logs')||'[]');this.textContent='Copied!'" class="uma-log-copy">Copy All</button>
-          <button onclick="localStorage.removeItem('umagrab_logs');this.closest('#uma-log-viewer').remove()" class="uma-log-clear">Clear</button>
-          <button onclick="this.closest('#uma-log-viewer').remove()" class="uma-log-close">&times;</button>
+          <button class="uma-log-copy">Copy All</button>
+          <button class="uma-log-clear">Clear</button>
+          <button class="uma-log-close">&times;</button>
         </span>
       </div>
       <div class="uma-log-body">
@@ -313,6 +313,19 @@
     html += '</div>';
     viewer.innerHTML = html;
     document.body.appendChild(viewer);
+
+    // Bind buttons (no inline onclick — CSP blocks it in extensions)
+    viewer.querySelector('.uma-log-copy').addEventListener('click', function () {
+      navigator.clipboard.writeText(localStorage.getItem(LOG_KEY) || '[]');
+      this.textContent = 'Copied!';
+    });
+    viewer.querySelector('.uma-log-clear').addEventListener('click', () => {
+      localStorage.removeItem(LOG_KEY);
+      viewer.remove();
+    });
+    viewer.querySelector('.uma-log-close').addEventListener('click', () => {
+      viewer.remove();
+    });
   }
 
   // ── Render ──
