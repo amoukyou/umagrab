@@ -63,11 +63,24 @@
 
   // ── Step 1: Gamma API ──
 
+  async function fetchWithRetry(url, retries = 2, delay = 1000) {
+    for (let i = 0; i <= retries; i++) {
+      try {
+        const resp = await fetch(url);
+        return resp;
+      } catch (e) {
+        if (i === retries) throw e;
+        log('warn', 'fetch_retry', { url, attempt: i + 1, error: e.message });
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+
   async function fetchGammaMarkets(eventSlug) {
     const url = `${GAMMA_API}/events?slug=${encodeURIComponent(eventSlug)}`;
     log('info', 'gamma_fetch', { url });
 
-    const resp = await fetch(url);
+    const resp = await fetchWithRetry(url);
     if (!resp.ok) {
       log('error', 'gamma_fetch_fail', { status: resp.status });
       throw new Error(`Gamma API: ${resp.status}`);
