@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Polymarket UMA Oracle Status",
+  "name": "UMAGrab",
   "version": "1.0.0",
-  "description": "Show UMA Oracle status for all markets on Polymarket event pages",
+  "description": "Grab UMA Oracle status for Polymarket events — see proposal states, disputes, and settlements at a glance.",
   "permissions": [],
   "host_permissions": [
     "https://gamma-api.polymarket.com/*",
