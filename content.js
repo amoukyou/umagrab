@@ -1,4 +1,4 @@
-// Polymarket UMA Oracle Status - Content Script
+// UMAGrab - Polymarket UMA Oracle Status
 // Uses Gamma API + tero.market UMA API
 (function () {
   'use strict';
@@ -10,6 +10,37 @@
   let panel = null;
   let currentSlug = null;
   let dragState = null;
+
+  // ── Logging ──
+
+  const LOG_KEY = 'umagrab_logs';
+  const LOG_MAX = 500;
+
+  function log(level, event, data) {
+    const entry = {
+      ts: new Date().toISOString(),
+      level,  // info, warn, error
+      event,  // e.g. 'gamma_fetch', 'uma_query', 'not_found'
+      slug: currentSlug,
+      url: location.href,
+      ...data
+    };
+
+    // Console
+    const tag = `[UMAGrab:${level}]`;
+    if (level === 'error') console.error(tag, event, data);
+    else if (level === 'warn') console.warn(tag, event, data);
+    else console.log(tag, event, data);
+
+    // Persist to localStorage
+    try {
+      const logs = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+      logs.push(entry);
+      // Keep last N entries
+      if (logs.length > LOG_MAX) logs.splice(0, logs.length - LOG_MAX);
+      localStorage.setItem(LOG_KEY, JSON.stringify(logs));
+    } catch (e) { /* storage full or unavailable */ }
+  }
 
   function getEventSlug() {
     const m = location.pathname.match(/^\/event\/([^/?#]+)/);
@@ -30,46 +61,78 @@
     return d.innerHTML;
   }
 
-  // Step 1: Get all markets for event from Gamma API
+  // ── Step 1: Gamma API ──
+
   async function fetchGammaMarkets(eventSlug) {
-    const resp = await fetch(`${GAMMA_API}/events?slug=${encodeURIComponent(eventSlug)}`);
-    if (!resp.ok) throw new Error(`Gamma API: ${resp.status}`);
+    const url = `${GAMMA_API}/events?slug=${encodeURIComponent(eventSlug)}`;
+    log('info', 'gamma_fetch', { url });
+
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      log('error', 'gamma_fetch_fail', { status: resp.status });
+      throw new Error(`Gamma API: ${resp.status}`);
+    }
     const data = await resp.json();
     const ev = Array.isArray(data) ? data[0] : data;
-    if (!ev) throw new Error('Event not found');
-    return ev.markets || [];
+    if (!ev) {
+      log('error', 'gamma_event_not_found', { eventSlug });
+      throw new Error('Event not found');
+    }
+
+    const markets = ev.markets || [];
+    log('info', 'gamma_ok', {
+      marketCount: markets.length,
+      marketIds: markets.map(m => m.id)
+    });
+    return markets;
   }
 
-  // Step 2: Query tero.market for UMA status
-  // Strategy: try siblings API first (fast, one call), then fallback to event_slug, then individual search
+  // ── Step 2: tero.market UMA API ──
+
   async function fetchUMAStatus(gammaMarkets, eventSlug) {
     const marketIds = gammaMarkets.map(m => String(m.id));
-    const umaMap = new Map(); // market_id -> {state, proposed, question, title_zh}
+    const umaMap = new Map();
+    const strategyLog = { a_event_slug: null, b_siblings: null, c_individual: null };
 
-    // Strategy A: Try event_slug query (works if enrich has run)
+    // Strategy A: event_slug query
     try {
-      const resp = await fetch(`${UMA_API}/questions?event_slug=${encodeURIComponent(eventSlug)}&per_page=200`);
+      const url = `${UMA_API}/questions?event_slug=${encodeURIComponent(eventSlug)}&per_page=200`;
+      const resp = await fetch(url);
       if (resp.ok) {
         const data = await resp.json();
+        const total = data.total || 0;
         for (const q of (data.questions || [])) {
           if (q.market_id && q.is_latest !== 0) {
             umaMap.set(String(q.market_id), q);
           }
         }
+        strategyLog.a_event_slug = { apiTotal: total, matched: umaMap.size };
+        log('info', 'strategy_a', { total, matched: umaMap.size });
+      } else {
+        strategyLog.a_event_slug = { error: resp.status };
+        log('warn', 'strategy_a_fail', { status: resp.status });
       }
-    } catch (e) { console.log('[UMA] event_slug query failed:', e); }
+    } catch (e) {
+      strategyLog.a_event_slug = { error: e.message };
+      log('warn', 'strategy_a_error', { error: e.message });
+    }
 
-    // If we found enough, return
-    if (umaMap.size >= marketIds.length * 0.5) return umaMap;
+    if (umaMap.size >= marketIds.length * 0.5) {
+      logFinalResult(marketIds, umaMap, strategyLog);
+      return umaMap;
+    }
 
-    // Strategy B: Try siblings API with first market_id
+    // Strategy B: siblings API
     if (umaMap.size === 0) {
-      for (const mid of marketIds) {
+      let tried = 0;
+      for (const mid of marketIds.slice(0, 3)) {
+        tried++;
         try {
           const resp = await fetch(`${UMA_API}/pm/siblings/${mid}`);
           if (resp.ok) {
             const data = await resp.json();
-            for (const s of (data.siblings || [])) {
+            const sibs = data.siblings || [];
+            for (const s of sibs) {
               umaMap.set(String(s.market_id), {
                 state: s.uma_state,
                 proposed_price: s.uma_proposed,
@@ -78,15 +141,22 @@
                 market_id: s.market_id
               });
             }
+            strategyLog.b_siblings = { triedMid: mid, siblingsReturned: sibs.length, matched: umaMap.size };
+            log('info', 'strategy_b', { mid, siblings: sibs.length, matched: umaMap.size });
             if (umaMap.size > 0) break;
           }
         } catch (e) { /* try next */ }
       }
+      if (umaMap.size === 0) {
+        strategyLog.b_siblings = { tried, matched: 0 };
+        log('warn', 'strategy_b_none', { tried });
+      }
     }
 
-    // Strategy C: Individual search for missing market_ids
+    // Strategy C: individual search
     const missing = marketIds.filter(mid => !umaMap.has(mid));
     if (missing.length > 0 && missing.length <= 20) {
+      let found = 0;
       const batchSize = 5;
       for (let i = 0; i < missing.length; i += batchSize) {
         const batch = missing.slice(i, i + batchSize);
@@ -97,6 +167,7 @@
               for (const q of (data.questions || [])) {
                 if (String(q.market_id) === mid && q.is_latest !== 0) {
                   umaMap.set(mid, q);
+                  found++;
                 }
               }
             })
@@ -104,10 +175,36 @@
         );
         await Promise.all(promises);
       }
+      strategyLog.c_individual = { searched: missing.length, found };
+      log('info', 'strategy_c', { searched: missing.length, found });
     }
 
+    logFinalResult(marketIds, umaMap, strategyLog);
     return umaMap;
   }
+
+  function logFinalResult(marketIds, umaMap, strategyLog) {
+    const found = marketIds.filter(mid => umaMap.has(mid));
+    const notFound = marketIds.filter(mid => !umaMap.has(mid));
+
+    log(notFound.length > 0 ? 'warn' : 'info', 'lookup_result', {
+      total: marketIds.length,
+      found: found.length,
+      notFound: notFound.length,
+      notFoundIds: notFound,
+      strategies: strategyLog
+    });
+
+    // Log each missing market individually for easy debugging
+    for (const mid of notFound) {
+      log('warn', 'market_not_found', {
+        market_id: mid,
+        strategies: strategyLog
+      });
+    }
+  }
+
+  // ── Panel ──
 
   function createPanel() {
     const el = document.createElement('div');
@@ -115,10 +212,11 @@
     el.innerHTML = `
       <div class="uma-header">
         <div class="uma-header-left">
-          <h3>UMA Oracle</h3>
+          <h3>UMAGrab</h3>
           <span class="uma-slug"></span>
         </div>
         <div class="uma-header-actions">
+          <button class="uma-log-btn" title="Show logs">log</button>
           <button class="uma-refresh-btn" title="Refresh">&#x21bb;</button>
           <button class="uma-collapse-btn" title="Collapse">&#x2212;</button>
           <button class="uma-close-btn" title="Close">&#x2715;</button>
@@ -152,9 +250,59 @@
       el.querySelector('.uma-collapse-btn').innerHTML = el.classList.contains('collapsed') ? '&#x002B;' : '&#x2212;';
     });
     el.querySelector('.uma-refresh-btn').addEventListener('click', () => { if (currentSlug) loadData(currentSlug); });
+    el.querySelector('.uma-log-btn').addEventListener('click', showLogViewer);
 
     return el;
   }
+
+  // ── Log viewer ──
+
+  function showLogViewer() {
+    // Toggle: if already showing, remove it
+    const existing = document.getElementById('uma-log-viewer');
+    if (existing) { existing.remove(); return; }
+
+    const logs = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+    const viewer = document.createElement('div');
+    viewer.id = 'uma-log-viewer';
+
+    // Filter to recent & relevant logs
+    const recent = logs.slice(-100);
+    const warns = recent.filter(l => l.level === 'warn' || l.level === 'error');
+
+    let html = `
+      <div class="uma-log-header">
+        <span>Logs (${recent.length} recent, ${warns.length} warnings)</span>
+        <span>
+          <button onclick="navigator.clipboard.writeText(localStorage.getItem('umagrab_logs')||'[]');this.textContent='Copied!'" class="uma-log-copy">Copy All</button>
+          <button onclick="localStorage.removeItem('umagrab_logs');this.closest('#uma-log-viewer').remove()" class="uma-log-clear">Clear</button>
+          <button onclick="this.closest('#uma-log-viewer').remove()" class="uma-log-close">&times;</button>
+        </span>
+      </div>
+      <div class="uma-log-body">
+    `;
+
+    // Show most recent first
+    for (const entry of [...recent].reverse()) {
+      const levelClass = entry.level === 'error' ? 'log-error' : entry.level === 'warn' ? 'log-warn' : 'log-info';
+      const time = entry.ts ? entry.ts.substring(11, 19) : '??';
+      const { ts, level, event, slug, url, ...rest } = entry;
+      const detail = Object.keys(rest).length > 0 ? JSON.stringify(rest) : '';
+      html += `<div class="uma-log-entry ${levelClass}">
+        <span class="log-time">${time}</span>
+        <span class="log-level">${level}</span>
+        <span class="log-event">${escapeHtml(event)}</span>
+        <span class="log-slug">${escapeHtml(slug || '')}</span>
+        ${detail ? `<div class="log-detail">${escapeHtml(detail)}</div>` : ''}
+      </div>`;
+    }
+
+    html += '</div>';
+    viewer.innerHTML = html;
+    document.body.appendChild(viewer);
+  }
+
+  // ── Render ──
 
   function renderResults(gammaMarkets, umaMap) {
     const body = panel.querySelector('.uma-body');
@@ -193,10 +341,7 @@
         const proposed = formatProposed(uma.proposed_price);
         const proposedSpan = proposed ? `<span class="uma-proposed-price">&rarr; ${escapeHtml(proposed)}</span>` : '';
 
-        // tero link: search by market_id to expand that question
         const teroLink = `${UMA_SITE}/?search=${item.mid}`;
-
-        // uma link: prefer transactionHash, fallback to search by market_id
         const txHash = uma.settlement_hash || uma.dispute_hash || uma.proposal_hash || uma.request_hash;
         const umaOracleLink = txHash
           ? `https://oracle.uma.xyz/?transactionHash=${txHash}&chainId=137`
@@ -223,21 +368,15 @@
     }
 
     body.innerHTML = html;
-
-    // After render, bind hover-linking between page markets and panel items
     bindPageHoverLinks(gammaMarkets);
   }
 
-  // ── Hover-link: PM page ↔ panel (bidirectional) ──
-  // PM cards use abbreviated text (e.g. "↑ $150") not the full question,
-  // and an absolute overlay intercepts mouse events.
-  // Solution: match by ORDER (Gamma API order = page card order),
-  // use mousemove + bounding rect hit-testing.
+  // ── Hover-link ──
 
   const PAGE_CARD_SELECTOR = 'div[data-orientation="vertical"].group.cursor-pointer';
 
   let hoverCleanups = [];
-  let marketLinks = []; // [{mid, pageEl, panelItem}]
+  let marketLinks = [];
   let currentHoverMid = null;
 
   function bindPageHoverLinks(gammaMarkets) {
@@ -255,14 +394,12 @@
       clearAllHighlights();
       marketLinks = [];
 
-      // Get page cards by selector, in DOM order (= display order)
       const pageCards = Array.from(document.querySelectorAll(PAGE_CARD_SELECTOR))
         .filter(el => {
           const rect = el.getBoundingClientRect();
-          return rect.width > 200 && rect.height > 30; // skip non-market "group" elements
+          return rect.width > 200 && rect.height > 30;
         });
 
-      // Match by index: Gamma markets[i] ↔ pageCards[i]
       const count = Math.min(gammaMarkets.length, pageCards.length);
       for (let i = 0; i < count; i++) {
         const mid = String(gammaMarkets[i].id);
@@ -271,12 +408,16 @@
         marketLinks.push({ mid, pageEl: pageCards[i], panelItem });
       }
 
-      console.log(`[UMA Extension] Linked ${marketLinks.length}/${gammaMarkets.length} markets (${pageCards.length} page cards found)`);
+      log('info', 'hover_link', {
+        pageCards: pageCards.length,
+        gammaMarkets: gammaMarkets.length,
+        linked: marketLinks.length
+      });
+
       const slugEl = panel?.querySelector('.uma-slug');
       if (slugEl) slugEl.textContent = `${marketLinks.length}/${gammaMarkets.length} linked`;
     }
 
-    // Throttled mousemove: check cursor position against page card bounding rects
     let lastMoveTime = 0;
     function onMouseMove(e) {
       const now = Date.now();
@@ -310,7 +451,6 @@
       }
     }
 
-    // Panel hover → page highlight
     function onPanelOver(e) {
       const marketEl = e.target.closest('.uma-market');
       if (!marketEl) return;
@@ -333,7 +473,6 @@
       clearAllHighlights();
     }
 
-    // Bind events
     document.addEventListener('mousemove', onMouseMove, true);
     const panelBody = panel?.querySelector('.uma-body');
     if (panelBody) {
@@ -350,7 +489,6 @@
       clearAllHighlights();
     });
 
-    // Scan after PM renders, re-scan on DOM changes
     setTimeout(scanAndBuild, 2000);
     let rescanTimer = null;
     const domObserver = new MutationObserver(() => {
@@ -361,14 +499,19 @@
     hoverCleanups.push(() => domObserver.disconnect());
   }
 
+  // ── Main ──
+
   async function loadData(eventSlug) {
     const body = panel.querySelector('.uma-body');
     panel.querySelector('.uma-slug').textContent = eventSlug;
     body.innerHTML = '<div class="uma-loading">Fetching markets...</div>';
 
+    log('info', 'load_start', { eventSlug });
+
     try {
       const gammaMarkets = await fetchGammaMarkets(eventSlug);
       if (!gammaMarkets.length) {
+        log('warn', 'no_gamma_markets', { eventSlug });
         body.innerHTML = '<div class="uma-empty">No markets found for this event</div>';
         return;
       }
@@ -377,9 +520,16 @@
       const umaMap = await fetchUMAStatus(gammaMarkets, eventSlug);
       renderResults(gammaMarkets, umaMap);
 
+      log('info', 'load_complete', {
+        eventSlug,
+        gammaCount: gammaMarkets.length,
+        umaFound: umaMap.size,
+        umaMissing: gammaMarkets.length - umaMap.size
+      });
+
     } catch (err) {
+      log('error', 'load_error', { eventSlug, error: err.message });
       body.innerHTML = `<div class="uma-error">Error: ${escapeHtml(err.message)}</div>`;
-      console.error('[UMA Extension]', err);
     }
   }
 
@@ -406,6 +556,6 @@
   observer.observe(document.body, { childList: true, subtree: true });
   window.addEventListener('popstate', () => setTimeout(checkAndShow, 500));
 
-  console.log('[UMA Extension] Loaded on:', location.href);
+  log('info', 'extension_loaded', { url: location.href });
   checkAndShow();
 })();
