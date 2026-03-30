@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Polymarket UMA Oracle Status",
+  "version": "1.0.0",
+  "description": "Show UMA Oracle status for all markets on Polymarket event pages",
+  "permissions": [],
+  "host_permissions": [
+    "https://gamma-api.polymarket.com/*",
+    "https://www.tero.market/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://polymarket.com/*", "https://www.polymarket.com/*", "*://polymarket.com/*"],
+      "js": ["content.js"],
+      "css": ["style.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

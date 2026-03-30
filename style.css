@@ -1,0 +1,227 @@
+/* UMA Oracle Status Panel - Light Theme */
+#uma-oracle-panel {
+  position: fixed;
+  top: 80px;
+  right: 16px;
+  width: 400px;
+  max-height: calc(100vh - 100px);
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+  z-index: 99999;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #333;
+  overflow: hidden;
+  transition: transform 0.2s ease;
+}
+
+#uma-oracle-panel.collapsed .uma-body {
+  display: none;
+}
+
+.uma-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #f8f9fa;
+  cursor: move;
+  user-select: none;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.uma-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.uma-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #222;
+}
+
+.uma-slug {
+  font-size: 11px;
+  color: #999;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uma-header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.uma-header-actions button {
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.uma-header-actions button:hover {
+  background: #e8e8e8;
+  color: #333;
+}
+
+.uma-body {
+  overflow-y: auto;
+  max-height: calc(100vh - 160px);
+  padding: 8px;
+}
+
+.uma-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.uma-body::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.uma-summary {
+  display: flex;
+  gap: 6px;
+  padding: 6px 8px;
+  flex-wrap: wrap;
+}
+
+.uma-summary-item {
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.uma-market {
+  padding: 10px 12px;
+  margin: 4px 0;
+  border-radius: 8px;
+  background: #f5f7fa;
+  border-left: 3px solid #ccc;
+  transition: background 0.15s;
+}
+
+.uma-market:hover {
+  background: #eef1f6;
+}
+
+.uma-market.state-Requested { border-left-color: #e67e22; }
+.uma-market.state-Proposed  { border-left-color: #2980b9; }
+.uma-market.state-Disputed  { border-left-color: #c0392b; }
+.uma-market.state-Settled   { border-left-color: #27ae60; }
+.uma-market.state-NotFound  { border-left-color: #bbb; }
+
+.uma-market-title {
+  font-size: 12px;
+  line-height: 1.4;
+  margin-bottom: 6px;
+  color: #444;
+  word-break: break-word;
+}
+
+.uma-market-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.uma-state {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.uma-state.Requested { background: #fef3e2; color: #e67e22; }
+.uma-state.Proposed  { background: #e8f4fd; color: #2980b9; }
+.uma-state.Disputed  { background: #fde8e8; color: #c0392b; }
+.uma-state.Settled   { background: #e8f8ef; color: #27ae60; }
+.uma-state.NotFound  { background: #f0f0f0; color: #999; }
+
+.uma-proposed-price {
+  font-size: 11px;
+  color: #777;
+}
+
+.uma-market-id {
+  font-size: 11px;
+  color: #999;
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.uma-links {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.uma-link {
+  font-size: 11px;
+  color: #fff;
+  text-decoration: none;
+  padding: 1px 8px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.uma-link:first-child {
+  background: #2980b9;
+}
+
+.uma-link:last-child {
+  background: #e74c3c;
+}
+
+.uma-link:hover {
+  opacity: 0.85;
+}
+
+/* Hover highlight - panel item */
+.uma-market.uma-highlight {
+  background: #dbeafe !important;
+  box-shadow: 0 0 0 2px #3b82f6;
+  transition: all 0.15s ease;
+}
+
+/* Hover highlight - PM page element */
+.uma-page-highlight {
+  outline: 2px solid #3b82f6 !important;
+  outline-offset: -2px;
+  box-shadow: 0 0 8px rgba(59,130,246,0.3) !important;
+  transition: all 0.15s ease;
+}
+
+.uma-loading {
+  text-align: center;
+  padding: 24px;
+  color: #999;
+  font-size: 13px;
+}
+
+.uma-error {
+  text-align: center;
+  padding: 16px;
+  color: #c0392b;
+  font-size: 13px;
+}
+
+.uma-empty {
+  text-align: center;
+  padding: 24px;
+  color: #999;
+  font-size: 13px;
+}
