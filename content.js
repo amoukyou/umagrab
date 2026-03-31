@@ -426,27 +426,47 @@
         return (titleEl ? titleEl.textContent : el.textContent).trim().toLowerCase();
       });
 
-      // Always use text matching (page may hide/reorder markets vs Gamma API order)
-      {
+      // Matching strategy:
+      // - Counts equal: use order matching (reliable, works with any language)
+      // - Counts differ: use smart text+number matching (handles hidden/expanded markets)
+      if (pageCards.length === gammaMarkets.length) {
+        // Order matching: verified identical between PM page and Gamma API
+        for (let i = 0; i < pageCards.length; i++) {
+          const mid = String(gammaMarkets[i].id);
+          const panelItem = panel?.querySelector(`.uma-market[data-mid="${mid}"]`);
+          if (!panelItem) continue;
+          marketLinks.push({ mid, pageEl: pageCards[i], panelItem });
+        }
+      } else {
+        // Smart matching for mismatched counts (e.g. expired markets hidden)
+        function extractNumbers(s) { return (s.match(/\d+/g) || []); }
         const usedGammaIdx = new Set();
         for (let ci = 0; ci < pageCards.length; ci++) {
           const cardText = cardTexts[ci];
+          const cardNums = extractNumbers(cardText);
+          const cardWords = cardText.split(/\s+/).filter(w => w.length >= 2);
           let bestIdx = -1;
           let bestScore = 0;
 
           for (let gi = 0; gi < gammaMarkets.length; gi++) {
             if (usedGammaIdx.has(gi)) continue;
             const question = (gammaMarkets[gi].question || '').toLowerCase();
-            // Score: count matching words (include short words like numbers)
-            const words = cardText.split(/\s+/).filter(w => w.length >= 2);
+            const qNums = extractNumbers(question);
             let score = 0;
-            for (const w of words) {
+
+            // Number matching (works across languages)
+            for (const n of cardNums) {
+              if (qNums.includes(n)) score += 5;
+            }
+
+            // Word matching (works for English cards)
+            for (const w of cardWords) {
               if (question.includes(w)) score++;
             }
-            // Bonus if card text is a direct substring of question
-            if (question.includes(cardText)) {
-              score += 10;
-            }
+
+            // Direct substring match
+            if (question.includes(cardText)) score += 10;
+
             if (score > bestScore) {
               bestScore = score;
               bestIdx = gi;
@@ -468,7 +488,7 @@
         pageCards: pageCards.length,
         gammaMarkets: gammaMarkets.length,
         linked: marketLinks.length,
-        method: 'text_match'
+        method: pageCards.length === gammaMarkets.length ? 'order' : 'text_match'
       });
 
       const slugEl = panel?.querySelector('.uma-slug');
