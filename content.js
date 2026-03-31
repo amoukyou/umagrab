@@ -43,7 +43,7 @@
   }
 
   function getEventSlug() {
-    const m = location.pathname.match(/^\/event\/([^/?#]+)/);
+    const m = location.pathname.match(/^(?:\/[a-z]{2})?\/event\/([^/?#]+)/);
     return m ? m[1] : null;
   }
 
