@@ -478,6 +478,28 @@
 
       const slugEl = panel?.querySelector('.uma-slug');
       if (slugEl) slugEl.textContent = `${marketLinks.length}/${gammaMarkets.length} linked`;
+
+      // Reorder panel items to match PM page DOM order
+      const body = panel?.querySelector('.uma-body');
+      if (body && marketLinks.length > 0) {
+        const summary = body.querySelector('.uma-summary');
+        const orderedMids = marketLinks.map(l => l.mid);
+        const allItems = Array.from(body.querySelectorAll('.uma-market'));
+        // Sort: linked items first (in page order), then unlinked
+        const linked = [];
+        const unlinked = [];
+        for (const mid of orderedMids) {
+          const el = allItems.find(e => e.dataset.mid === mid);
+          if (el) linked.push(el);
+        }
+        for (const el of allItems) {
+          if (!linked.includes(el)) unlinked.push(el);
+        }
+        // Re-append in order (after summary)
+        for (const el of [...linked, ...unlinked]) {
+          body.appendChild(el);
+        }
+      }
     }
 
     let lastMoveTime = 0;
