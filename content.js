@@ -354,8 +354,7 @@
     html += `<span class="uma-summary-item" style="background:#f0f0f0">Total: ${items.length}</span>`;
     html += '</div>';
 
-    const order = { Disputed: 0, Proposed: 1, Requested: 2, Settled: 3, 'Not in UMA': 4, Unknown: 5 };
-    items.sort((a, b) => (order[a.state] ?? 9) - (order[b.state] ?? 9));
+    // Keep Gamma API order (same as PM page) — do NOT re-sort
 
     for (const item of items) {
       const uma = item.uma;
@@ -483,6 +482,7 @@
 
     let lastMoveTime = 0;
     function onMouseMove(e) {
+      if (!marketLinks.length) return; // Not ready yet
       const now = Date.now();
       if (now - lastMoveTime < 60) return;
       lastMoveTime = now;
