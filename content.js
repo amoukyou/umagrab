@@ -123,11 +123,11 @@
         log('info', 'strategy_a', { total, matched: umaMap.size });
       } else {
         strategyLog.a_event_slug = { error: resp.status };
-        log('warn', 'strategy_a_fail', { status: resp.status });
+        log('info', 'strategy_a_fail', { status: resp.status });
       }
     } catch (e) {
       strategyLog.a_event_slug = { error: e.message };
-      log('warn', 'strategy_a_error', { error: e.message });
+      log('info', 'strategy_a_error', { error: e.message });
     }
 
     // Strategy B: siblings API (only if A found nothing)
