@@ -200,7 +200,7 @@
     const found = marketIds.filter(mid => umaMap.has(mid));
     const notFound = marketIds.filter(mid => !umaMap.has(mid));
 
-    log(notFound.length > 0 ? 'warn' : 'info', 'lookup_result', {
+    log('info', 'lookup_result', {
       total: marketIds.length,
       found: found.length,
       notFound: notFound.length,
@@ -208,9 +208,9 @@
       strategies: strategyLog
     });
 
-    // Log each missing market individually for easy debugging
+    // Log each missing market individually for debugging (info level, not warn)
     for (const mid of notFound) {
-      log('warn', 'market_not_found', {
+      log('info', 'market_not_found', {
         market_id: mid,
         strategies: strategyLog
       });
