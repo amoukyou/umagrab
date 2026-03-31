@@ -432,17 +432,8 @@
         return (titleEl ? titleEl.textContent : el.textContent).trim().toLowerCase();
       });
 
-      // If card count matches gamma count, use direct order matching (fast path)
-      if (pageCards.length === gammaMarkets.length) {
-        for (let i = 0; i < pageCards.length; i++) {
-          const mid = String(gammaMarkets[i].id);
-          const panelItem = panel?.querySelector(`.uma-market[data-mid="${mid}"]`);
-          if (!panelItem) continue;
-          marketLinks.push({ mid, pageEl: pageCards[i], panelItem });
-        }
-      } else {
-        // Mismatch: page hides some markets (e.g. expired ones).
-        // Use text matching: for each page card, find the best matching gamma market.
+      // Always use text matching (page may hide/reorder markets vs Gamma API order)
+      {
         const usedGammaIdx = new Set();
         for (let ci = 0; ci < pageCards.length; ci++) {
           const cardText = cardTexts[ci];
@@ -452,14 +443,14 @@
           for (let gi = 0; gi < gammaMarkets.length; gi++) {
             if (usedGammaIdx.has(gi)) continue;
             const question = (gammaMarkets[gi].question || '').toLowerCase();
-            // Score: count how many words from the card text appear in the question
-            const words = cardText.split(/\s+/).filter(w => w.length > 2);
+            // Score: count matching words (include short words like numbers)
+            const words = cardText.split(/\s+/).filter(w => w.length >= 2);
             let score = 0;
             for (const w of words) {
               if (question.includes(w)) score++;
             }
-            // Also check if question contains the card text directly
-            if (question.includes(cardText) || cardText.includes(question.substring(0, 20))) {
+            // Bonus if card text is a direct substring of question
+            if (question.includes(cardText)) {
               score += 10;
             }
             if (score > bestScore) {
@@ -483,7 +474,7 @@
         pageCards: pageCards.length,
         gammaMarkets: gammaMarkets.length,
         linked: marketLinks.length,
-        method: pageCards.length === gammaMarkets.length ? 'order' : 'text_match'
+        method: 'text_match'
       });
 
       const slugEl = panel?.querySelector('.uma-slug');
