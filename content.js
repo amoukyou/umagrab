@@ -162,7 +162,7 @@
       }
       if (umaMap.size === 0) {
         strategyLog.b_siblings = { tried, matched: 0 };
-        log('warn', 'strategy_b_none', { tried });
+        log('info', 'strategy_b_none', { tried });
       }
     }
 
