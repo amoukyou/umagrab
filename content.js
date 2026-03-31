@@ -130,12 +130,7 @@
       log('warn', 'strategy_a_error', { error: e.message });
     }
 
-    if (umaMap.size >= marketIds.length * 0.5) {
-      logFinalResult(marketIds, umaMap, strategyLog);
-      return umaMap;
-    }
-
-    // Strategy B: siblings API
+    // Strategy B: siblings API (only if A found nothing)
     if (umaMap.size === 0) {
       let tried = 0;
       for (const mid of marketIds.slice(0, 3)) {
