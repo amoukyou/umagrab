@@ -166,15 +166,15 @@
       }
     }
 
-    // Strategy C: individual search
+    // Strategy C: batch search by market_id (no limit)
     const missing = marketIds.filter(mid => !umaMap.has(mid));
-    if (missing.length > 0 && missing.length <= 20) {
+    if (missing.length > 0) {
       let found = 0;
-      const batchSize = 5;
+      const batchSize = 10;
       for (let i = 0; i < missing.length; i += batchSize) {
         const batch = missing.slice(i, i + batchSize);
         const promises = batch.map(mid =>
-          fetch(`${UMA_API}/questions?search=${mid}&per_page=5`)
+          fetch(`${UMA_API}/questions?search=${mid}&per_page=1`)
             .then(r => r.ok ? r.json() : { questions: [] })
             .then(data => {
               for (const q of (data.questions || [])) {
